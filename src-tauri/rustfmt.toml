@@ -1,0 +1,21 @@
+#https://github.com/rust-lang/rustfmt
+
+max_width = 154
+#merge_imports = true
+## 是否标准化注释
+#normalize_comments = true
+## 导入分组
+#group_imports = "StdExternalCrate"
+## 设置注释的最大宽度
+#comment_width = 120
+#
+## 格式化字符串
+#format_strings = true
+#
+## 导入的粒度
+#imports_granularity = "Module"
+#
+## 控制 where 子句是否单行显示
+#where_single_line = true
+## 包装注释
+#wrap_comments = true
