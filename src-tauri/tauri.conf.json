@@ -6,7 +6,6 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
-    "withGlobalTauri": false,
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },
@@ -34,9 +33,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["assets/**/*"],
-    "deb": {
-        "depends": ["libwebkit2gtk-4.0-dev"]
-    }
+    "resources": ["assets/**/*"]
   }
 }
