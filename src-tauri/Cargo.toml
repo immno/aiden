@@ -39,6 +39,6 @@ arrow-schema = "53.0"
 futures = "0.3"
 tempfile = "3.14"
 arrow = { version = "53.2", optional = false }
-#log = "0.4"
-#tauri = { version = "2.1.0", features = [] }
-#tauri-plugin-log = "2.0.0-rc"
+log = "0.4"
+tauri = { version = "2.1.0", features = [] }
+tauri-plugin-log = "2.0.0-rc"

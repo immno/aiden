@@ -40,7 +40,6 @@ jobs:
             ref: main
             submodules: true
             fetch-depth: 1
-            submodule-recursive: true
             token: ${{ secrets.GH_TOKEN }}
 
       - name: Install Node.js
