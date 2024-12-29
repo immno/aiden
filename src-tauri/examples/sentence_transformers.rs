@@ -243,6 +243,7 @@
 use std::{iter::once, sync::Arc};
 use std::str::FromStr;
 use std::sync::atomic::AtomicPtr;
+use std::time::Instant;
 use arrow_array::{RecordBatch, RecordBatchIterator, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use candle::Device;
@@ -261,12 +262,17 @@ use lancedb::{
 use lancedb::embeddings::EmbeddingDefinition;
 use tokenizers::Tokenizer;
 use app_lib::errors::AppResult;
+use app_lib::models::flate::decompress_and_merge_files;
 use app_lib::models::transformers::SentenceTransformersEmbeddings;
 
-const MODEL: &str = "/home/mno/RustroverProjects/doc-embedder/modes/all-MiniLM-L6-v2/model.safetensors";
-const CONFIG_JSON: &str = include_str!("../modes/all-MiniLM-L6-v2/config.json");
-const TOKENIZER_JSON: &str = include_str!("../modes/all-MiniLM-L6-v2/tokenizer.json");
+const MODEL: &str = "D:\\RustroverProjects\\aiden\\src-tauri\\assets\\modes\\all-MiniLM-L6-v2\\model.safetensors";
+const CONFIG_JSON: &str = include_str!("../assets/modes/all-MiniLM-L6-v2/config.json");
+const TOKENIZER_JSON: &str = include_str!("../assets/modes/all-MiniLM-L6-v2/tokenizer.json");
 
+
+// const MODEL: &str = "D:\\RustroverProjects\\aiden\\src-tauri\\assets\\modes\\albert-chinese-base\\model.safetensors";
+// const CONFIG_JSON: &str = include_str!("../assets/modes/albert-chinese-base/config.json");
+// const TOKENIZER_JSON: &str = include_str!("../assets/modes/albert-chinese-base/tokenizer_config.json");
 
 #[tokio::main]
 async fn main() -> AppResult<()> {
@@ -278,9 +284,13 @@ async fn main() -> AppResult<()> {
     //     .config_path("/home/mno/RustroverProjects/doc-embedder/modes/all-MiniLM-L6-v2/config.json")
     //     .build()?;
 
+    let input_dir = "D:\\RustroverProjects\\aiden\\src-tauri\\assets\\modes\\all-MiniLM-L6-v2";
+    let output_path = "D:\\RustroverProjects\\aiden\\src-tauri\\assets\\modes\\all-MiniLM-L6-v2\\model.safetensors";
+
+    let _ = decompress_and_merge_files(input_dir, output_path)?;
     let config: Config = serde_json::from_str(CONFIG_JSON)?;
     let tokenizer = Tokenizer::from_str(TOKENIZER_JSON).unwrap();
-    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[MODEL], DTYPE, &Device::Cpu)? };
+    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[output_path], DTYPE, &Device::Cpu)? };
     let model = BertModel::load(vb, &config)?;
 
     let embedding = SentenceTransformersEmbeddings::new(model, tokenizer, Device::Cpu, None);

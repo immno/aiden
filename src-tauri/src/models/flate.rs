@@ -64,3 +64,29 @@ pub fn decompress_and_merge_files<P: AsRef<Path>>(input_dir: P, output_path: P) 
 
     Ok(hasher.compute())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Instant;
+
+    #[test]
+    fn test_split_and_compress_file() {
+        let input_path = "D:\\RustroverProjects\\aiden\\src-tauri\\assets\\modes\\albert-chinese-base\\model.safetensors";
+        let output_path = "D:\\RustroverProjects\\aiden\\src-tauri\\assets\\modes\\albert-chinese-base";
+
+        let ins = Instant::now();
+        let md5 = split_and_compress_file(input_path, output_path, 1024 * 1024).unwrap();
+        println!("ins: {:?}, MD5: {:?}", ins.elapsed(), md5);
+    }
+
+    #[test]
+    fn test_decompress_and_merge_files() {
+        let input_dir = "/home/mno/RustroverProjects/aiden/src-tauri/modes/all-MiniLM-L6-v2/";
+        let output_path = "/home/mno/RustroverProjects/aiden/src-tauri/modes/all-MiniLM-L6-v2/model222.safetensors";
+
+        let ins = Instant::now();
+        let md5 = decompress_and_merge_files(input_dir, output_path).unwrap();
+        println!("ins: {:?}, MD5: {:?}", ins.elapsed(), md5);
+    }
+}

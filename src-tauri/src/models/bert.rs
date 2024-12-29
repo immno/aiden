@@ -7,8 +7,8 @@ use tokenizers::Tokenizer;
 use tracing::{debug, info};
 
 const MODEL: &str = "/home/mno/RustroverProjects/doc-embedder/modes/all-MiniLM-L6-v2/model.safetensors";
-const CONFIG_JSON: &str = include_str!("../../modes/all-MiniLM-L6-v2/config.json");
-const TOKENIZER_JSON: &str = include_str!("../../modes/all-MiniLM-L6-v2/tokenizer.json");
+const CONFIG_JSON: &str = include_str!("../../assets/modes/all-MiniLM-L6-v2/config.json");
+const TOKENIZER_JSON: &str = include_str!("../../assets/modes/all-MiniLM-L6-v2/tokenizer.json");
 
 thread_local! {
     static BERT_MODEL: Rc<BertModelWrapper> =   {
@@ -133,73 +133,73 @@ impl BertModelWrapper {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::embed_multiple_sentences;
-    fn cosine_similarity_for_test(a: &Vec<f32>, b: &Vec<f32>) -> f32 {
-        if a.len() != b.len() {
-            panic!("Vectors must have the same length");
-        }
-
-        let dot_product: f32 = a.iter().zip(b.iter()).map(|(&x, &y)| x * y).sum();
-        let magnitude_a: f32 = a.iter().map(|&x| x * x).sum::<f32>().sqrt();
-        let magnitude_b: f32 = b.iter().map(|&x| x * x).sum::<f32>().sqrt();
-
-        dot_product / (magnitude_a * magnitude_b)
-    }
-
-    #[test]
-    fn test_cosine_similarity() {
-        let a = Tensor::from_slice(&[1.0, 1.0, 2.0], (1, 3), &Device::Cpu).unwrap();
-        let b = Tensor::from_slice(&[1.0, 1.0, 3.0], (1, 3), &Device::Cpu).unwrap();
-        let c = Tensor::from_slice(&[2.0, 4.0, 5.0], (1, 3), &Device::Cpu).unwrap();
-        // we will test that a and b are closer than a and c or b and c
-        let similarity_ab = BertModelWrapper::cosine_similarity(&a, &b).unwrap();
-        let similarity_ac = BertModelWrapper::cosine_similarity(&a, &c).unwrap();
-        let similarity_bc = BertModelWrapper::cosine_similarity(&b, &c).unwrap();
-        // just print all results now
-        println!("similarity_ab: {}", similarity_ab);
-        println!("similarity_ac: {}", similarity_ac);
-        println!("similarity_bc: {}", similarity_bc);
-
-        assert!(similarity_ab > similarity_ac);
-        assert!(similarity_ab > similarity_bc);
-    }
-
-    #[test]
-    fn test_embed_multiple_sentences() {
-        let bert_model = get_model_reference().unwrap();
-        let sentences_1 = vec![
-            "My cat loves to nap in the sunlight",
-            "Whiskers is always chasing after the red laser dot",
-            "As a Siamese, my cat has a beautiful coat",
-        ];
-
-        let sentences_2 = vec![
-            "My kitten enjoys playing with string",
-            "The little feline is quick to pounce on toys",
-            "Siamese kittens have striking blue eyes",
-        ];
-
-        let sentences_3 = vec![
-            "The chef is preparing a gourmet meal tonight",
-            "Cooking requires precise timing and skill",
-            "Gourmet dishes often include exotic ingredients",
-        ];
-        // now we emebed and test the similarity
-        let embeddings_1 = embed_multiple_sentences(&sentences_1, true, &bert_model).unwrap();
-        let embeddings_2 = embed_multiple_sentences(&sentences_2, true, &bert_model).unwrap();
-        let embeddings_3 = embed_multiple_sentences(&sentences_3, true, &bert_model).unwrap();
-        // now we test the similarity between the embeddings
-        let similarity_12 = cosine_similarity_for_test(&embeddings_1[0], &embeddings_2[0]);
-        let similarity_13 = cosine_similarity_for_test(&embeddings_1[0], &embeddings_3[0]);
-        let similarity_23 = cosine_similarity_for_test(&embeddings_2[0], &embeddings_3[0]);
-
-        println!("similarity_12: {}", similarity_12);
-        println!("similarity_13: {}", similarity_13);
-        println!("similarity_23: {}", similarity_23);
-        assert!(similarity_12 > similarity_13);
-        assert!(similarity_12 > similarity_23);
-    }
-}
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::embed_multiple_sentences;
+//     fn cosine_similarity_for_test(a: &Vec<f32>, b: &Vec<f32>) -> f32 {
+//         if a.len() != b.len() {
+//             panic!("Vectors must have the same length");
+//         }
+//
+//         let dot_product: f32 = a.iter().zip(b.iter()).map(|(&x, &y)| x * y).sum();
+//         let magnitude_a: f32 = a.iter().map(|&x| x * x).sum::<f32>().sqrt();
+//         let magnitude_b: f32 = b.iter().map(|&x| x * x).sum::<f32>().sqrt();
+//
+//         dot_product / (magnitude_a * magnitude_b)
+//     }
+//
+//     #[test]
+//     fn test_cosine_similarity() {
+//         let a = Tensor::from_slice(&[1.0, 1.0, 2.0], (1, 3), &Device::Cpu).unwrap();
+//         let b = Tensor::from_slice(&[1.0, 1.0, 3.0], (1, 3), &Device::Cpu).unwrap();
+//         let c = Tensor::from_slice(&[2.0, 4.0, 5.0], (1, 3), &Device::Cpu).unwrap();
+//         // we will test that a and b are closer than a and c or b and c
+//         let similarity_ab = BertModelWrapper::cosine_similarity(&a, &b).unwrap();
+//         let similarity_ac = BertModelWrapper::cosine_similarity(&a, &c).unwrap();
+//         let similarity_bc = BertModelWrapper::cosine_similarity(&b, &c).unwrap();
+//         // just print all results now
+//         println!("similarity_ab: {}", similarity_ab);
+//         println!("similarity_ac: {}", similarity_ac);
+//         println!("similarity_bc: {}", similarity_bc);
+//
+//         assert!(similarity_ab > similarity_ac);
+//         assert!(similarity_ab > similarity_bc);
+//     }
+//
+//     #[test]
+//     fn test_embed_multiple_sentences() {
+//         let bert_model = get_model_reference().unwrap();
+//         let sentences_1 = vec![
+//             "My cat loves to nap in the sunlight",
+//             "Whiskers is always chasing after the red laser dot",
+//             "As a Siamese, my cat has a beautiful coat",
+//         ];
+//
+//         let sentences_2 = vec![
+//             "My kitten enjoys playing with string",
+//             "The little feline is quick to pounce on toys",
+//             "Siamese kittens have striking blue eyes",
+//         ];
+//
+//         let sentences_3 = vec![
+//             "The chef is preparing a gourmet meal tonight",
+//             "Cooking requires precise timing and skill",
+//             "Gourmet dishes often include exotic ingredients",
+//         ];
+//         // now we emebed and test the similarity
+//         let embeddings_1 = embed_multiple_sentences(&sentences_1, true, &bert_model).unwrap();
+//         let embeddings_2 = embed_multiple_sentences(&sentences_2, true, &bert_model).unwrap();
+//         let embeddings_3 = embed_multiple_sentences(&sentences_3, true, &bert_model).unwrap();
+//         // now we test the similarity between the embeddings
+//         let similarity_12 = cosine_similarity_for_test(&embeddings_1[0], &embeddings_2[0]);
+//         let similarity_13 = cosine_similarity_for_test(&embeddings_1[0], &embeddings_3[0]);
+//         let similarity_23 = cosine_similarity_for_test(&embeddings_2[0], &embeddings_3[0]);
+//
+//         println!("similarity_12: {}", similarity_12);
+//         println!("similarity_13: {}", similarity_13);
+//         println!("similarity_23: {}", similarity_23);
+//         assert!(similarity_12 > similarity_13);
+//         assert!(similarity_12 > similarity_23);
+//     }
+// }

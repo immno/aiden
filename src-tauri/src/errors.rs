@@ -5,10 +5,10 @@ use thiserror::Error;
 use tokio::task::JoinError;
 use tracing_subscriber::filter::LevelParseError;
 
-pub type AppResult<T> = Result<T, EmbErrors>;
+pub type AppResult<T> = Result<T, AidenErrors>;
 
 #[derive(Error, Debug)]
-pub enum EmbErrors {
+pub enum AidenErrors {
     #[error("{0}")]
     StdIo(#[from] std::io::Error),
 
