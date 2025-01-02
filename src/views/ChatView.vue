@@ -1,6 +1,5 @@
 <template>
   <div class="chat-view">
-    <h1>Chat View</h1>
     <div class="message-list">
       <div v-for="(message, index) in messages" :key="index" :class="['message', message.role]">
         {{ message.content }}
