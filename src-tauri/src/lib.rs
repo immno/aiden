@@ -6,19 +6,10 @@ pub mod storage;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(AppState {
-            sync_list: Mutex::new(Vec::new()), // 初始化状态
-        })
         .setup(init_plugin())
-        .setup(init_models())
         .setup(init_lancedb())
-        .invoke_handler(tauri::generate_handler![
-            rag_query,
-            rag_scan_files,
-            get_sync_list,
-            add_sync_items,
-            delete_sync_item
-        ]) // 注册命令
+        .setup(init_models())
+        .invoke_handler(tauri::generate_handler![rag_query, get_sync_list, add_sync_items, delete_sync_item]) // 注册命令
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -70,7 +61,16 @@ fn init_models() -> fn(&mut App) -> Result<(), Box<dyn Error>> {
             tokenizer,
         };
 
-        app.manage(AidenTextEmbedder::new(Embedder::Text(TextEmbedder::Bert(Box::new(embedder)))));
+        let aiden_embedder = AidenTextEmbedder::new(Embedder::Text(TextEmbedder::Bert(Box::new(embedder))));
+
+        app.manage(aiden_embedder.clone());
+
+        let files = app.state::<FilesRepo>().inner().clone();
+        let file_contexts = app.state::<FileContentsRepo>().inner().clone();
+
+        let mut manager = EmbedManager::default();
+        manager.start_embedding(files.clone(), aiden_embedder);
+        manager.start_write_embedding(files, file_contexts);
 
         Ok(())
     }
@@ -80,81 +80,86 @@ fn init_lancedb() -> fn(&mut App) -> Result<(), Box<dyn Error>> {
     |app| {
         // 获取资源目录（打包后的 assets 目录）
         let app_path = app.path().app_data_dir().expect("Failed to get app dir");
-        let db = tauri::async_runtime::block_on(async move { DB::new(app_path.join("db").to_string_lossy().as_ref()).await });
+        let db = tauri::async_runtime::block_on(async move { DB::new(app_path.join("db").to_string_lossy().as_ref()).await })?;
 
-        // 将模型路径存储到应用状态中
-        app.manage(db?);
+        let db2 = db.clone();
+        let files_db = tauri::async_runtime::block_on(async move { FilesRepo::new(&db2).await })?;
+
+        let db3 = db.clone();
+        let file_context_db = tauri::async_runtime::block_on(async move { FileContentsRepo::new(&db3).await })?;
+
+        app.manage(file_context_db);
+        app.manage(files_db);
+        app.manage(db);
         Ok(())
     }
 }
-use tokenizers::TruncationParams;
-use tokenizers::PaddingParams;
-use tokenizers::Tokenizer;
+
+use crate::embed::job::EmbedManager;
+use crate::embed::AidenTextEmbedder;
 use crate::errors::AppResult;
 use crate::models::flate::decompress_and_merge_files;
+use crate::storage::file_contents::FileContentsRepo;
+use crate::storage::files::{FileRecord, FilesRepo};
 use crate::storage::DB;
 use candle_nn::VarBuilder;
+use embed_anything::embeddings::embed::{Embedder, EmbeddingResult, TextEmbedder};
 use embed_anything::embeddings::local::bert::BertEmbedder;
 use embed_anything::embeddings::local::pooling::Pooling;
 use embed_anything::embeddings::select_device;
 use embed_anything::models::bert::{BertModel, Config, DTYPE};
-use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::error::Error;
-use std::sync::Mutex;
-use embed_anything::embeddings::embed::{Embedder, TextEmbedder};
 use tauri::{App, Manager, State};
-use crate::embed::AidenTextEmbedder;
-
-#[derive(Serialize, Deserialize)]
-struct RagResponse {
-    success: bool,
-    message: String,
-}
+use tokenizers::PaddingParams;
+use tokenizers::Tokenizer;
+use tokenizers::TruncationParams;
 
 /// RAG 查询命令
 #[tauri::command]
-fn rag_query(query: String) -> Result<String, String> {
-    // 在这里实现 RAG 查询逻辑
-    Ok(format!("Response to: {}", query))
-}
+fn rag_query(query: String, file_context: State<'_, FileContentsRepo>, emb: State<'_, AidenTextEmbedder>) -> AppResult<String> {
+    let file_context = file_context.inner().clone();
+    let emb = emb.inner().clone();
+    tauri::async_runtime::block_on(async move {
+        let mut s = emb.embed(&[query], emb.config().batch_size).await?;
+        if s.is_empty() {
+            Ok("".to_string())
+        } else {
+            let v = match s.remove(0) {
+                EmbeddingResult::DenseVector(d) => d,
+                EmbeddingResult::MultiVector(mut m) => m.remove(0),
+            };
+            let records = file_context.find_similar(v, 5).await?;
+            let mut map: HashMap<String, Vec<String>> = HashMap::new();
 
-/// RAG 文件扫描命令
-#[tauri::command]
-fn rag_scan_files(file_paths: Vec<String>) -> Result<RagResponse, String> {
-    // 在这里实现文件扫描逻辑
-    Ok(RagResponse {
-        success: true,
-        message: format!("Scanned {} files", file_paths.len()),
+            for record in records.0 {
+                map.entry(record.file_path).or_insert_with(Vec::new).push(record.text);
+            }
+
+            let rep = map
+                .into_iter()
+                .map(|(k, v)| format!("文件：{}\n 内容：{}", k, v.join("\n")))
+                .collect::<Vec<_>>()
+                .join("\n");
+            Ok(rep)
+        }
     })
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-struct SyncItem {
-    name: String,
-    add_time: String,
-    sync_time: String,
-    progress: u32,
-}
-
-struct AppState {
-    sync_list: Mutex<Vec<SyncItem>>,
+#[tauri::command]
+fn get_sync_list(state: State<'_, FilesRepo>) -> AppResult<Vec<FileRecord>> {
+    let state = state.inner().clone();
+    tauri::async_runtime::block_on(async move { state.query_all().await })
 }
 
 #[tauri::command]
-fn get_sync_list(state: State<AppState>) -> Vec<SyncItem> {
-    state.sync_list.lock().unwrap().clone()
+fn add_sync_items(items: Vec<String>, state: State<'_, FilesRepo>) -> AppResult<()> {
+    let state = state.inner().clone();
+    tauri::async_runtime::block_on(async move { state.insert_data(items).await })
 }
 
 #[tauri::command]
-fn add_sync_items(items: Vec<SyncItem>, state: State<AppState>) {
-    let mut sync_list = state.sync_list.lock().unwrap();
-    sync_list.extend(items);
-}
-
-#[tauri::command]
-fn delete_sync_item(index: usize, state: State<AppState>) {
-    let mut sync_list = state.sync_list.lock().unwrap();
-    if index < sync_list.len() {
-        sync_list.remove(index);
-    }
+fn delete_sync_item(path: String, state: State<'_, FilesRepo>) -> AppResult<()> {
+    let state = state.inner().clone();
+    tauri::async_runtime::block_on(async move { state.delete_by(&path).await })
 }

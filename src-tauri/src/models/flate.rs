@@ -27,7 +27,7 @@ pub fn split_and_compress_file<P: AsRef<Path>>(input_path: P, output_dir: P, chu
 
         // 压缩分片并写入文件
         let mut encoder = GzEncoder::new(buffered_writer, Compression::fast());
-        hasher.write(&buffer[..bytes_read])?;
+        hasher.write_all(&buffer[..bytes_read])?;
         encoder.write_all(&buffer[..bytes_read])?;
         encoder.finish()?;
 
@@ -56,7 +56,7 @@ pub fn decompress_and_merge_files<P: AsRef<Path>>(input_dir: P, output_path: P) 
         let mut decoder = GzDecoder::new(buffered_reader);
         let mut buffer = Vec::new();
         decoder.read_to_end(&mut buffer)?;
-        hasher.write(&buffer)?;
+        hasher.write_all(&buffer)?;
         // 写入到输出文件
         buffered_writer.write_all(&buffer)?;
         part_number += 1;

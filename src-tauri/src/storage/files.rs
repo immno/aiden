@@ -6,25 +6,27 @@ use chrono::Local;
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
 use lancedb::Table;
+use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 
-static DEFINE_TABLE_SCHEMA: LazyLock<Arc<Schema>> = LazyLock::new(|| {
+static DEFINE_FILES_SCHEMA: LazyLock<Arc<Schema>> = LazyLock::new(|| {
     Arc::new(Schema::new(vec![
-        Field::new("name".to_string(), DataType::Utf8, false),
-        Field::new("file_path".to_string(), DataType::Utf8, false),
-        Field::new("file_type".to_string(), DataType::Utf8, true),
-        Field::new("add_time".to_string(), DataType::Int64, false),
-        Field::new("sync_time".to_string(), DataType::Int64, false),
-        Field::new("progress".to_string(), DataType::UInt32, false),
+        Field::new("name", DataType::Utf8, false),
+        Field::new("file_path", DataType::Utf8, false),
+        Field::new("file_type", DataType::Utf8, true),
+        Field::new("add_time", DataType::Int64, false),
+        Field::new("sync_time", DataType::Int64, false),
+        Field::new("progress", DataType::UInt32, false),
     ]))
 });
 
+#[derive(Clone)]
 pub struct FilesRepo(Table);
 
 impl FilesRepo {
     pub async fn new(db: &DB) -> AppResult<Self> {
-        let table = db.get_or_crate_table("files", DEFINE_TABLE_SCHEMA.clone()).await?;
+        let table = db.get_or_crate_table("files", DEFINE_FILES_SCHEMA.clone()).await?;
         Ok(Self(table))
     }
 
@@ -34,7 +36,7 @@ impl FilesRepo {
 
         for path in paths {
             let path_obj = std::path::Path::new(&path);
-            let name = path_obj.file_name().unwrap_or_else(|| path_obj.as_os_str()).to_string_lossy().to_string();
+            let name = path_obj.file_name().unwrap_or(path_obj.as_os_str()).to_string_lossy().to_string();
 
             let file_type = if path_obj.is_file() {
                 path_obj.extension().map(|ext| ext.to_string_lossy().to_string())
@@ -51,7 +53,7 @@ impl FilesRepo {
         }
 
         let batches = RecordBatch::try_new(
-            DEFINE_TABLE_SCHEMA.clone(),
+            DEFINE_FILES_SCHEMA.clone(),
             vec![
                 Arc::new(StringArray::from(records.names)),
                 Arc::new(StringArray::from(records.file_paths)),
@@ -62,25 +64,38 @@ impl FilesRepo {
             ],
         );
 
-        self.add(RecordBatchIterator::new(vec![batches], DEFINE_TABLE_SCHEMA.clone()))
+        self.add(RecordBatchIterator::new(vec![batches], DEFINE_FILES_SCHEMA.clone()))
             .execute()
             .await?;
+        Ok(())
+    }
+
+    /// 删除数据
+    pub async fn delete_by(&self, path: &str) -> AppResult<()> {
+        self.delete(&format!("file_path = '{}'", path)).await?;
         Ok(())
     }
 
     /// 查询全部数据
     pub async fn query_all(&self) -> AppResult<Vec<FileRecord>> {
         let results = self.query().execute().await?.try_collect::<Vec<_>>().await?;
-        let records = results.into_iter().map(|row| FileRecords::from(row).0).flatten().collect();
+        let records = results.into_iter().flat_map(|row| FileRecords::from(row).0).collect();
 
         Ok(records)
     }
 
     /// 查询 progress = 0 的数据
-    pub async fn query_progress_zero(&self) -> AppResult<Vec<FileRecord>> {
-        let results = self.query().only_if("progress = 0").execute().await?.try_collect::<Vec<_>>().await?;
+    pub async fn query_progress_zero(&self, limit: usize) -> AppResult<Vec<FileRecord>> {
+        let results = self
+            .query()
+            .only_if("progress = 0")
+            .limit(limit)
+            .execute()
+            .await?
+            .try_collect::<Vec<_>>()
+            .await?;
 
-        let records = results.into_iter().map(|row| FileRecords::from(row).0).flatten().collect();
+        let records = results.into_iter().flat_map(|row| FileRecords::from(row).0).collect();
 
         Ok(records)
     }
@@ -118,7 +133,7 @@ impl Deref for FileRecords {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct FileRecord {
     pub name: String,
     pub file_path: String,
@@ -252,7 +267,7 @@ mod lancedb_files_tests {
         repo.insert_data(paths.clone()).await.unwrap();
 
         // 查询 progress = 0 的数据
-        let records = repo.query_progress_zero().await.unwrap();
+        let records = repo.query_progress_zero(10).await.unwrap();
         assert_eq!(records.len(), 2);
 
         // 验证查询结果
@@ -310,7 +325,7 @@ mod lancedb_files_tests {
         );
         assert_eq!(&records[1].file_type, &Some("md".to_string()));
         assert!(&records[1].add_time > &0);
-        assert!(&records[1].sync_time> &0);
+        assert!(&records[1].sync_time > &0);
         assert_eq!(&records[1].progress, &100);
     }
 }

@@ -16,6 +16,7 @@
       <div class="sync-list-content">
         <div class="grid-header">
           <div>目录/文件名</div>
+          <div>文件路径</div>
           <div>添加时间</div>
           <div>同步时间</div>
           <div>同步完成度</div>
@@ -24,8 +25,9 @@
         <div class="grid-body">
           <div v-for="(item, index) in syncList" :key="index" class="grid-row">
             <div class="grid-cell">{{ item.name }}</div>
-            <div class="grid-cell">{{ item.add_time }}</div>
-            <div class="grid-cell">{{ item.sync_time }}</div>
+            <div class="grid-cell file-path">{{ item.file_path }}</div>
+            <div class="grid-cell">{{ formatTime(item.add_time) }}</div>
+            <div class="grid-cell">{{ item.sync_time ? formatTime(item.sync_time) : '未同步' }}</div>
             <div class="grid-cell">
               <div class="progress-bar">
                 <div class="progress" :style="{ width: item.progress + '%' }"></div>
@@ -33,7 +35,7 @@
               </div>
             </div>
             <div class="grid-cell">
-              <button @click="deleteSyncItem(index)" class="delete-button">
+              <button @click="deleteSyncItem(item.file_path)" class="delete-button">
                 <span class="icon-delete">删除</span>
               </button>
             </div>
@@ -50,22 +52,28 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { desktopDir } from '@tauri-apps/api/path';
 
-interface SyncItem {
+interface FileRecord {
   name: string;
-  add_time: string;
-  sync_time: string;
+  file_path: string;
+  add_time: number;
+  sync_time: number | null;
   progress: number;
 }
 
 export default defineComponent({
   name: 'ConfigView',
   setup() {
-    const syncList = ref<SyncItem[]>([]);
+    const syncList = ref<FileRecord[]>([]);
+
+    // 格式化时间戳
+    const formatTime = (timestamp: number) => {
+      return new Date(timestamp).toLocaleString();
+    };
 
     // 从后端获取同步列表
     const fetchSyncList = async () => {
       try {
-        const response = await invoke<SyncItem[]>('get_sync_list');
+        const response = await invoke<FileRecord[]>('get_sync_list');
         syncList.value = response;
       } catch (error) {
         console.error('获取同步列表失败：', error);
@@ -82,7 +90,7 @@ export default defineComponent({
       });
       if (selected) {
         const items = Array.isArray(selected) ? selected : [selected];
-        await submitItems(items, 'directory');
+        await submitItems(items);
       }
     };
 
@@ -95,20 +103,14 @@ export default defineComponent({
       });
       if (selected) {
         const items = Array.isArray(selected) ? selected : [selected];
-        await submitItems(items, 'file');
+        await submitItems(items);
       }
     };
 
     // 提交选择的目录或文件到后端
-    const submitItems = async (items: string[], type: 'directory' | 'file') => {
+    const submitItems = async (items: string[]) => {
       try {
-        const newItems: SyncItem[] = items.map((item) => ({
-          name: item,
-          add_time: new Date().toLocaleString(),
-          sync_time: '未同步',
-          progress: 0,
-        }));
-        await invoke('add_sync_items', { items: newItems });
+        await invoke('add_sync_items', { items });
         await fetchSyncList(); // 重新获取同步列表
       } catch (error) {
         console.error('添加同步项失败：', error);
@@ -116,9 +118,9 @@ export default defineComponent({
     };
 
     // 删除同步项
-    const deleteSyncItem = async (index: number) => {
+    const deleteSyncItem = async (filePath: string) => {
       try {
-        await invoke('delete_sync_item', { index });
+        await invoke('delete_sync_item', { path: filePath });
         await fetchSyncList(); // 重新获取同步列表
       } catch (error) {
         console.error('删除同步项失败：', error);
@@ -135,6 +137,7 @@ export default defineComponent({
       addDirectory,
       addFiles,
       deleteSyncItem,
+      formatTime,
     };
   },
 });
@@ -221,14 +224,14 @@ export default defineComponent({
 
 .grid-header {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 0.5fr;
+  grid-template-columns: 2fr 3fr 1fr 1fr 1fr 0.5fr;
   gap: 10px;
   padding: 12px;
   background-color: #fafafa;
   font-weight: bold;
   color: #333;
   border-bottom: 1px solid #f0f0f0;
-  font-size: 12px; /* 调小表头字体 */
+  font-size: 12px;
 }
 
 .grid-body {
@@ -238,12 +241,12 @@ export default defineComponent({
 
 .grid-row {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 0.5fr;
+  grid-template-columns: 2fr 3fr 1fr 1fr 1fr 0.5fr;
   gap: 10px;
   padding: 12px;
   border-bottom: 1px solid #f0f0f0;
   transition: background-color 0.3s ease;
-  font-size: 12px; /* 调小每行字体 */
+  font-size: 12px;
 }
 
 .grid-row:hover {
@@ -253,9 +256,13 @@ export default defineComponent({
 .grid-cell {
   display: flex;
   align-items: center;
-  white-space: nowrap; /* 防止换行 */
+  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis; /* 超出部分显示省略号 */
+  text-overflow: ellipsis;
+}
+
+.file-path {
+  max-width: 300px; /* 限制文件路径的最大宽度 */
 }
 
 .progress-bar {
@@ -278,7 +285,7 @@ export default defineComponent({
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 10px; /* 调小进度条字体 */
+  font-size: 10px;
   color: #333;
 }
 
@@ -288,7 +295,7 @@ export default defineComponent({
   cursor: pointer;
   color: #ff4d4f;
   transition: color 0.3s ease;
-  font-size: 12px; /* 调小删除按钮字体 */
+  font-size: 12px;
 }
 
 .delete-button:hover {
@@ -296,6 +303,6 @@ export default defineComponent({
 }
 
 .icon-delete {
-  font-size: 12px; /* 调小删除图标字体 */
+  font-size: 12px;
 }
 </style>

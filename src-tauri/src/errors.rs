@@ -1,6 +1,6 @@
 use arrow_schema::ArrowError;
-use candle::Error;
 use std::num::ParseIntError;
+use tauri::ipc::InvokeError;
 use thiserror::Error;
 use tokio::task::JoinError;
 use tracing_subscriber::filter::LevelParseError;
@@ -31,8 +31,17 @@ pub enum AidenErrors {
     ArrowError(#[from] ArrowError),
 
     #[error("{0}")]
-    CandleError(#[from] Error),
+    CandleError(#[from] candle::Error),
+
+    #[error("{0}")]
+    AnyError(#[from] anyhow::Error),
 
     #[error("{0}")]
     LancedbError(#[from] lancedb::Error),
+}
+
+impl From<AidenErrors> for InvokeError {
+    fn from(value: AidenErrors) -> Self {
+        InvokeError::from_anyhow(value.into())
+    }
 }
