@@ -18,7 +18,7 @@ static DEFINE_FILE_CONTENT_SCHEMA: LazyLock<Arc<Schema>> = LazyLock::new(|| {
         // 模型不同768或384就不同，根据模型而异
         Field::new(
             "embedding",
-            DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Float32, false)), 384),
+            DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Float32, true)), 384),
             false,
         ),
         Field::new("add_time", DataType::Int64, false),
@@ -53,6 +53,13 @@ impl FileContentsRepo {
             .execute()
             .await?;
         Ok(())
+    }
+
+    pub async fn query_all(&self, n: usize) -> AppResult<FileContentRecords> {
+        let results = self.query().limit(n).execute().await?.try_collect::<Vec<_>>().await?;
+        let records = results.into_iter().flat_map(|row| FileContentRecords::from(row).0).collect();
+
+        Ok(FileContentRecords(records))
     }
 
     pub async fn find_similar(&self, vector: Vec<f32>, n: usize) -> AppResult<FileContentRecords> {
@@ -153,5 +160,85 @@ impl FileContentRecordFields {
             embeddings,
             add_times,
         }
+    }
+}
+
+#[cfg(test)]
+mod lancedb_file_contents_tests {
+    use super::*;
+    use tempfile::{tempdir, TempDir};
+
+    async fn repo(dir: &TempDir) -> FileContentsRepo {
+        let db_path = dir.path().join("test_db");
+        let db = DB::new(db_path.to_str().unwrap()).await.unwrap();
+        FileContentsRepo::new(&db).await.unwrap()
+    }
+
+    // 创建一个测试用的 FileContentRecordFields
+    fn create_test_records() -> FileContentRecordFields {
+        let path = "test_path".to_string();
+        let data = vec![
+            EmbedData::new(EmbeddingResult::DenseVector(vec![1.0; 384]),Some("哈哈哈哈哈哈哈哈".to_string()), None),
+            EmbedData::new(EmbeddingResult::DenseVector(vec![2.0; 384]),Some("古古怪怪古古怪怪".to_string()), None),
+        ];
+        FileContentRecordFields::new(path, data)
+    }
+
+    #[tokio::test]
+    async fn test_insert_data() {
+        let dir = tempdir().unwrap();
+        let repo = repo(&dir).await;
+
+        // 创建测试数据
+        let records = create_test_records();
+
+        // 插入数据
+        repo.insert_data(records).await.unwrap();
+
+        // 查询数据
+        let results = repo.query_all(10).await.unwrap();
+
+        // 验证插入的数据是否正确
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].file_path, "test_path");
+        assert_eq!(results[0].text, "哈哈哈哈哈哈哈哈");
+        assert_eq!(results[1].file_path, "test_path");
+        assert_eq!(results[1].text, "古古怪怪古古怪怪");
+    }
+
+    #[tokio::test]
+    async fn test_find_similar() {
+        let dir = tempdir().unwrap();
+        let repo = repo(&dir).await;
+
+        // 创建并插入测试数据
+        let records = create_test_records();
+        repo.insert_data(records).await.unwrap();
+
+        // 查询相似数据
+        let query_vector = vec![1.0; 384];
+        let results = repo.find_similar(query_vector, 1).await.unwrap();
+
+        // 验证查询结果
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].file_path, "test_path");
+        assert_eq!(results[0].text, "哈哈哈哈哈哈哈哈");
+    }
+
+    #[tokio::test]
+    async fn test_delete_by() {
+        let dir = tempdir().unwrap();
+        let repo = repo(&dir).await;
+
+        // 创建并插入测试数据
+        let records = create_test_records();
+        repo.insert_data(records).await.unwrap();
+
+        // 删除数据
+        repo.delete_by("test_path").await.unwrap();
+
+        // 查询数据，验证是否已删除
+        let results = repo.query_all(10).await.unwrap();
+        assert_eq!(results.len(), 0); // 数据应已被删除
     }
 }

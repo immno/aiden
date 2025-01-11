@@ -3,7 +3,6 @@ use std::num::ParseIntError;
 use tauri::ipc::InvokeError;
 use thiserror::Error;
 use tokio::task::JoinError;
-use tracing_subscriber::filter::LevelParseError;
 
 pub type AppResult<T> = Result<T, AidenErrors>;
 
@@ -23,9 +22,6 @@ pub enum AidenErrors {
 
     #[error("{0}")]
     ParseError(#[from] ParseIntError),
-
-    #[error("{0}")]
-    LevelParseError(#[from] LevelParseError),
 
     #[error("{0}")]
     ArrowError(#[from] ArrowError),

@@ -1,13 +1,13 @@
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use md5::{Context, Digest};
+use md5::{Context};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
 /// 拆分并压缩文件
-pub fn split_and_compress_file<P: AsRef<Path>>(input_path: P, output_dir: P, chunk_size: usize) -> std::io::Result<Digest> {
+pub fn split_and_compress_file<P: AsRef<Path>>(input_path: P, output_dir: P, chunk_size: usize) -> std::io::Result<String> {
     // 打开输入文件
     let mut input_file = File::open(input_path)?;
     let mut buffer = vec![0u8; chunk_size];
@@ -34,10 +34,14 @@ pub fn split_and_compress_file<P: AsRef<Path>>(input_path: P, output_dir: P, chu
         part_number += 1;
     }
 
-    Ok(hasher.compute())
+    Ok(format!("{:x}", hasher.compute()))
 }
 
-pub fn decompress_and_merge_files<P: AsRef<Path>>(input_dir: P, output_path: P) -> std::io::Result<Digest> {
+pub fn decompress_and_merge_files<P: AsRef<Path>>(input_dir: P, output_path: P) -> std::io::Result<String> {
+    // 确保目录存在
+    if let Some(parent_dir) = output_path.as_ref().parent(){
+        std::fs::create_dir_all(parent_dir)?;
+    };
     let output_file = File::create(output_path)?;
     let mut buffered_writer = BufWriter::new(output_file);
     let mut hasher = Context::new();
@@ -62,7 +66,23 @@ pub fn decompress_and_merge_files<P: AsRef<Path>>(input_dir: P, output_path: P) 
         part_number += 1;
     }
 
-    Ok(hasher.compute())
+    Ok(format!("{:x}", hasher.compute()))
+}
+
+pub fn calculate_md5(file_path: &Path) -> std::io::Result<String> {
+    let mut file = File::open(file_path)?;
+    let mut hasher = Context::new();
+    let mut buffer = [0; 1024];
+
+    loop {
+        let bytes_read = file.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.write_all(&buffer[..bytes_read])?;
+    }
+
+    Ok(format!("{:x}", hasher.compute()))
 }
 
 #[cfg(test)]
@@ -72,21 +92,21 @@ mod tests {
 
     #[test]
     fn test_split_and_compress_file() {
-        let input_path = "D:\\RustroverProjects\\aiden\\src-tauri\\assets\\modes\\albert-chinese-base\\model.safetensors";
-        let output_path = "D:\\RustroverProjects\\aiden\\src-tauri\\assets\\modes\\albert-chinese-base";
+        let input_path = "D:\\RustroverProjects\\aiden\\src-tauri\\assets\\models\\albert-chinese-base\\model.safetensors";
+        let output_path = "D:\\RustroverProjects\\aiden\\src-tauri\\assets\\models\\albert-chinese-base";
 
         let ins = Instant::now();
         let md5 = split_and_compress_file(input_path, output_path, 1024 * 1024).unwrap();
-        println!("ins: {:?}, MD5: {:?}", ins.elapsed(), md5);
+        println!("ins: {:?}, MD5: {}", ins.elapsed(), md5);
     }
 
     #[test]
     fn test_decompress_and_merge_files() {
-        let input_dir = "/home/mno/RustroverProjects/aiden/src-tauri/modes/all-MiniLM-L6-v2/";
-        let output_path = "/home/mno/RustroverProjects/aiden/src-tauri/modes/all-MiniLM-L6-v2/model222.safetensors";
+        let input_dir = "D:\\RustroverProjects\\aiden\\src-tauri\\assets\\models\\all-MiniLM-L6-v2";
+        let output_path = "D:\\RustroverProjects\\aiden\\src-tauri\\assets\\models\\all-MiniLM-L6-v2\\model222.safetensors";
 
         let ins = Instant::now();
         let md5 = decompress_and_merge_files(input_dir, output_path).unwrap();
-        println!("ins: {:?}, MD5: {:?}", ins.elapsed(), md5);
+        println!("ins: {:?}, MD5: {}", ins.elapsed(), md5);
     }
 }

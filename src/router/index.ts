@@ -12,12 +12,12 @@ const router = createRouter({
       children: [
         {
           path: 'chat',
-          name: 'chat',
+          name: '对话',
           component: ChatView,
         },
         {
           path: 'config',
-          name: 'config',
+          name: '文件配置',
           component: ConfigView,
         },
       ],
