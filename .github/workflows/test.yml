@@ -2,9 +2,9 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
   test:
@@ -36,16 +36,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-            persist-credentials: false
-            ref: main
-            submodules: true
-            fetch-depth: 1
-            token: ${{ secrets.GH_TOKEN }}
+          persist-credentials: false
+          ref: main
+          submodules: true
+          fetch-depth: 1
+          token: ${{ secrets.GH_TOKEN }}
 
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-            node-version: lts/*
+          node-version: lts/*
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -57,12 +57,12 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf protobuf-compiler
 
       - name: Install macos dependencies
-        if: matrix.os == 'macos'
+        if: matrix.os == 'macos-latest'
         run: |
           brew install protobuf
 
       - name: Install windows dependencies
-        if: matrix.os == 'windows'
+        if: matrix.os == 'windows-latest'
         run: |
           choco install protoc
 
@@ -71,4 +71,4 @@ jobs:
 
       - uses: tauri-apps/tauri-action@v0
         env:
-            GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
