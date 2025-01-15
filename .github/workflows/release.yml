@@ -56,11 +56,21 @@ jobs:
           key: ${{ matrix.target }}
           workspaces: './src-tauri -> target'
 
-      - name: Install dependencies (ubuntu only)
+      - name: Install dependencies
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf protobuf-compiler
+
+      - name: Install macos dependencies
+        if: matrix.os == 'macos'
+        run: |
+          brew install protobuf
+
+      - name: Install windows dependencies
+        if: matrix.os == 'windows'
+        run: |
+          choco install protoc
 
       - name: Install frontend dependencies
         run: npm install
