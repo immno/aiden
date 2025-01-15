@@ -7,7 +7,7 @@ use chrono::Local;
 use embed_anything::embeddings::embed::{EmbedData, EmbeddingResult};
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
-use lancedb::Table;
+use lancedb::{DistanceType, Table};
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 
@@ -63,7 +63,16 @@ impl FileContentsRepo {
     }
 
     pub async fn find_similar(&self, vector: Vec<f32>, n: usize) -> AppResult<FileContentRecords> {
-        let results = self.query().nearest_to(vector)?.limit(n).execute().await?.try_collect::<Vec<_>>().await?;
+        let results = self
+            .query()
+            .nearest_to(vector)?
+            .distance_type(DistanceType::Cosine)
+            .distance_range(Some(0.0), Some(0.5))
+            .limit(n)
+            .execute()
+            .await?
+            .try_collect::<Vec<_>>()
+            .await?;
 
         let records = results.into_iter().flat_map(|row| FileContentRecords::from(row).0).collect();
 
@@ -178,8 +187,8 @@ mod lancedb_file_contents_tests {
     fn create_test_records() -> FileContentRecordFields {
         let path = "test_path".to_string();
         let data = vec![
-            EmbedData::new(EmbeddingResult::DenseVector(vec![1.0; 384]),Some("哈哈哈哈哈哈哈哈".to_string()), None),
-            EmbedData::new(EmbeddingResult::DenseVector(vec![2.0; 384]),Some("古古怪怪古古怪怪".to_string()), None),
+            EmbedData::new(EmbeddingResult::DenseVector(vec![1.0; 384]), Some("哈哈哈哈哈哈哈哈".to_string()), None),
+            EmbedData::new(EmbeddingResult::DenseVector(vec![2.0; 384]), Some("古古怪怪古古怪怪".to_string()), None),
         ];
         FileContentRecordFields::new(path, data)
     }
