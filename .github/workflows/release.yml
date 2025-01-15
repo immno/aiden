@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - release
-    paths:
-      - "**/Cargo.toml"
-      - ".github/workflows/release.yml"
 
 jobs:
   build-publish:
