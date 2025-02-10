@@ -7,7 +7,7 @@
     </div>
     <div class="input-area">
       <input v-model="inputMessage" @keyup.enter="sendMessage" placeholder="Type your message..." />
-      <button @click="sendMessage">Send</button>
+      <button @click="sendMessage" :disabled="isSending || !inputMessage.trim()">Send</button>
     </div>
   </div>
 </template>
@@ -22,6 +22,7 @@ export default defineComponent({
   setup() {
     const messages = ref<Array<{ role: string; content: string }>>([]);
     const inputMessage = ref('');
+    const isSending = ref(false);
     const md = new MarkdownIt();
 
     const renderMarkdown = (content: string) => {
@@ -29,27 +30,35 @@ export default defineComponent({
     };
 
     const sendMessage = async () => {
-      if (inputMessage.value.trim() === '') return;
+      if (inputMessage.value.trim() === '' || isSending.value) return;
 
+      isSending.value = true;
       const userMessage = { role: 'user', content: inputMessage.value };
       messages.value.push(userMessage);
+      inputMessage.value = ''; // 立即清空输入框
 
       try {
-        const response = await invoke<string>('rag_query', { query: inputMessage.value });
+        const response = await invoke<string>('rag_query', { query: userMessage.content });
         messages.value.push({ role: 'assistant', content: response });
       } catch (error) {
         console.error('Error sending message:', error);
+      } finally {
+        isSending.value = false;
       }
-
-      inputMessage.value = '';
     };
 
-    return { messages, inputMessage, sendMessage, renderMarkdown };
+    return { messages, inputMessage, isSending, sendMessage, renderMarkdown };
   },
 });
 </script>
 
 <style scoped>
+/* 原有样式保持不变 */
+.input-area button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
 .chat-view {
   height: 100%; /* 占满父容器高度 */
   display: flex;

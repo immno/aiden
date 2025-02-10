@@ -123,74 +123,68 @@ fn init_models(app: &mut App) -> Result<(), Box<dyn Error>> {
 
 /// RAG 查询命令
 #[tauri::command]
-fn rag_query(
+async fn rag_query(
     query: String,
     ai: State<'_, OpenAiRepo>,
     file_context: State<'_, FileContentsRepo>,
     emb: State<'_, AidenTextEmbedder>,
 ) -> AppResult<String> {
-    let ai = ai.inner().clone();
-    let file_context = file_context.inner().clone();
-    let emb = emb.inner().clone();
-    tauri::async_runtime::block_on(async move {
-        let question = query.clone();
-        let mut s = emb.embed(&[query], emb.config().batch_size).await?;
-        if s.is_empty() {
-            Ok("请输入内容或问题".to_string())
-        } else {
-            let v = match s.remove(0) {
-                EmbeddingResult::DenseVector(d) => d,
-                EmbeddingResult::MultiVector(mut m) => m.remove(0),
-            };
-            let records = file_context.find_similar(v, 5).await?;
-            let res = if let Some(rt) = ai.query_id().await? {
+    let question = query.clone();
+    let mut s = emb.embed(&[query], emb.config().batch_size).await?;
+    if s.is_empty() {
+        Ok("请输入内容或问题".to_string())
+    } else {
+        let v = match s.remove(0) {
+            EmbeddingResult::DenseVector(d) => d,
+            EmbeddingResult::MultiVector(mut m) => m.remove(0),
+        };
+        let records = file_context.find_similar(v, 5).await?;
+        let res = if let Some(rt) = ai.query_id().await? {
+            if rt.state {
                 let agent = OpenAiAgent::new(rt.url.as_ref(), rt.token.as_ref());
-                if records.is_empty() {
-                    agent.query_by_prompt(question.as_str()).await?
-                }else {
-                    agent.query(records).await?
+                match agent.query(question.as_str(), &records).await {
+                    Ok(r) => r,
+                    Err(_) => {
+                        let _ = ai.update_state(false).await;
+                        records.to_markdown()
+                    }
                 }
             } else {
                 records.to_markdown()
-            };
-
-            Ok(res)
-        }
-    })
+            }
+        } else {
+            records.to_markdown()
+        };
+        Ok(res)
+    }
 }
 
 #[tauri::command]
-fn get_sync_list(state: State<'_, FilesRepo>) -> AppResult<Vec<FileRecord>> {
+async fn get_sync_list(state: State<'_, FilesRepo>) -> AppResult<Vec<FileRecord>> {
     let state = state.inner().clone();
-    tauri::async_runtime::block_on(async move { state.query_all().await })
+    state.query_all().await
 }
 
 #[tauri::command]
-fn add_sync_items(items: Vec<String>, state: State<'_, FilesRepo>) -> AppResult<()> {
-    let state = state.inner().clone();
-    tauri::async_runtime::block_on(async move { state.insert_data(items).await })
+async fn add_sync_items(items: Vec<String>, state: State<'_, FilesRepo>) -> AppResult<()> {
+    state.insert_data(items).await
 }
 
 #[tauri::command]
-fn delete_sync_item(path: String, files: State<'_, FilesRepo>, contents: State<'_, FileContentsRepo>) -> AppResult<()> {
-    let path_c = path.clone();
-    let files = files.inner().clone();
-    let contents = contents.inner().clone();
-    let _ = tauri::async_runtime::block_on(async move { files.delete_by(&path).await });
-    tauri::async_runtime::block_on(async move { contents.delete_by(&path_c).await })
+async fn delete_sync_item(path: String, files: State<'_, FilesRepo>, contents: State<'_, FileContentsRepo>) -> AppResult<()> {
+    let _ = files.delete_by(&path).await;
+    contents.delete_by(&path).await
 }
 
 #[tauri::command]
-fn get_ai_config(ai: State<'_, OpenAiRepo>) -> AppResult<OpenAiConfig> {
-    let ai = ai.inner().clone();
-    let res = tauri::async_runtime::block_on(async move { ai.query_id().await })?;
+async fn get_ai_config(ai: State<'_, OpenAiRepo>) -> AppResult<OpenAiConfig> {
+    let res = ai.query_id().await?;
     Ok(res.map(|r| OpenAiConfig { url: r.url, token: r.token }).unwrap_or_default())
 }
 
 #[tauri::command]
-fn save_ai_config(config: OpenAiConfig, ai: State<'_, OpenAiRepo>) -> AppResult<()> {
-    let ai = ai.inner().clone();
-    let _ = tauri::async_runtime::block_on(async move { ai.update_insert_token(config.url.as_ref(), config.token.as_ref()).await });
+async fn save_ai_config(config: OpenAiConfig, ai: State<'_, OpenAiRepo>) -> AppResult<()> {
+    let _ = ai.update_insert_token(config.url.as_ref(), config.token.as_ref()).await;
     Ok(())
 }
 

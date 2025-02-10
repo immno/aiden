@@ -49,15 +49,23 @@ impl OpenAiAgent {
     }
 
     /// https://dashscope.aliyuncs.com/compatible-mode/v1
-    pub async fn query(&self, context: FileContentRecords) -> AppResult<String> {
-        let s = context.0.into_iter().map(|v|v.text).join("\n");
+    pub async fn query(&self, prompt: &str, context: &FileContentRecords) -> AppResult<String> {
+        if context.is_empty() {
+            self.query_by_prompt(prompt).await
+        } else {
+            self.query_context(context).await
+        }
+    }
+
+    /// https://dashscope.aliyuncs.com/compatible-mode/v1
+    pub async fn query_context(&self, context: &FileContentRecords) -> AppResult<String> {
+        let s = context.0.iter().map(|v|v.text.clone()).join("\n");
         let comedian_agent = self.0
             .agent("deepseek-r1")
             .build();
 
         Ok(comedian_agent.prompt(&format!("{}{}", PREAMBLE, s)).await?)
     }
-
     /// https://dashscope.aliyuncs.com/compatible-mode/v1
     pub async fn query_by_prompt(&self, prompt: &str) -> AppResult<String> {
         let comedian_agent = self.0
