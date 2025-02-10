@@ -1,7 +1,7 @@
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use md5::{Context};
+use md5::Context;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
@@ -39,7 +39,7 @@ pub fn split_and_compress_file<P: AsRef<Path>>(input_path: P, output_dir: P, chu
 
 pub fn decompress_and_merge_files<P: AsRef<Path>>(input_dir: P, output_path: P) -> std::io::Result<String> {
     // 确保目录存在
-    if let Some(parent_dir) = output_path.as_ref().parent(){
+    if let Some(parent_dir) = output_path.as_ref().parent() {
         std::fs::create_dir_all(parent_dir)?;
     };
     let output_file = File::create(output_path)?;

@@ -1,25 +1,27 @@
 pub mod job;
+pub mod text_loader;
+pub mod statistical;
 
+use crate::errors::AppResult;
+use candle_nn::VarBuilder;
 use embed_anything::config::TextEmbedConfig;
 use embed_anything::embeddings::embed::{EmbedData, Embedder, TextEmbedder};
+use embed_anything::embeddings::local::bert::BertEmbedder;
+use embed_anything::embeddings::local::pooling::Pooling;
+use embed_anything::embeddings::select_device;
+use embed_anything::models::bert::{BertModel, Config, DTYPE};
 use embed_anything::text_loader::SplittingStrategy;
 use std::fs;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use candle_nn::VarBuilder;
-use embed_anything::embeddings::local::bert::BertEmbedder;
-use embed_anything::embeddings::local::pooling::Pooling;
-use embed_anything::embeddings::select_device;
-use embed_anything::models::bert::{BertModel, Config, DTYPE};
 use tokenizers::{PaddingParams, Tokenizer, TruncationParams};
-use crate::errors::AppResult;
+use crate::extract::embed_file;
 
 #[derive(Clone)]
 pub struct AidenTextEmbedder(Arc<Embedder>);
 
 impl AidenTextEmbedder {
-
     pub fn new(embedder: Embedder) -> Self {
         Self(Arc::new(embedder))
     }
@@ -62,7 +64,7 @@ impl AidenTextEmbedder {
             .with_chunk_size(256, Some(0.3))
             .with_batch_size(32)
             .with_buffer_size(32)
-            .with_splitting_strategy(SplittingStrategy::Sentence)
+            .with_splitting_strategy(SplittingStrategy::Semantic)
             .with_semantic_encoder(self.0.clone())
     }
     pub async fn embedding<P: AsRef<Path>>(&self, path: P) -> Vec<EmbedData> {
@@ -91,7 +93,7 @@ impl AidenTextEmbedder {
     }
 
     pub async fn embedding_file<P: AsRef<Path>>(&self, path: P) -> Option<Vec<EmbedData>> {
-        embed_anything::embed_file(path, &self.0, Some(&self.config()), None::<fn(Vec<EmbedData>)>)
+        embed_file(path, &self.0, Some(&self.config()), None::<fn(Vec<EmbedData>)>)
             .await
             .ok()
             .flatten()
@@ -126,9 +128,9 @@ fn get_files_in_dir<P: AsRef<Path>>(path: P) -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::flate::decompress_and_merge_files;
     use std::path::Path;
     use tempfile::tempdir;
-    use crate::models::flate::decompress_and_merge_files;
 
     #[tokio::test]
     async fn test_embedding_file() {

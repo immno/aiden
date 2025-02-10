@@ -2,6 +2,7 @@
 
 ```sh
 npm install
+cargo install tauri-cli --version "^2.0.0"
 ```
 
 ### Compile and Hot-Reload for Development

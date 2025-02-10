@@ -2,7 +2,7 @@
   <div class="chat-view">
     <div class="message-list">
       <div v-for="(message, index) in messages" :key="index" :class="['message', message.role]">
-        {{ message.content }}
+        <div v-html="renderMarkdown(message.content)"></div>
       </div>
     </div>
     <div class="input-area">
@@ -15,12 +15,18 @@
 <script lang="ts">
 import { defineComponent, ref } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import MarkdownIt from 'markdown-it';
 
 export default defineComponent({
   name: 'ChatView',
   setup() {
     const messages = ref<Array<{ role: string; content: string }>>([]);
     const inputMessage = ref('');
+    const md = new MarkdownIt();
+
+    const renderMarkdown = (content: string) => {
+      return md.render(content);
+    };
 
     const sendMessage = async () => {
       if (inputMessage.value.trim() === '') return;
@@ -38,7 +44,7 @@ export default defineComponent({
       inputMessage.value = '';
     };
 
-    return { messages, inputMessage, sendMessage };
+    return { messages, inputMessage, sendMessage, renderMarkdown };
   },
 });
 </script>

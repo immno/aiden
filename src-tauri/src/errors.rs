@@ -18,7 +18,19 @@ pub enum AidenErrors {
     Str(&'static str),
 
     #[error("{0}")]
+    String(String),
+
+    #[error("{0}")]
     TaskJoinError(#[from] JoinError),
+
+    #[error("{0}")]
+    LoPdfError(#[from] lopdf::Error),
+
+    #[error("{0}")]
+    DocxError(#[from] docx_rs::ReaderError),
+
+    #[error("{0}")]
+    PromptError(#[from] rig::completion::PromptError),
 
     #[error("{0}")]
     ParseError(#[from] ParseIntError),

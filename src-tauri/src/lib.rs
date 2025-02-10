@@ -1,21 +1,25 @@
+pub mod agent;
 pub mod embed;
 pub mod errors;
+pub mod extract;
 pub mod models;
 pub mod storage;
 
+use crate::agent::OpenAiAgent;
 use crate::embed::job::EmbedManager;
 use crate::embed::AidenTextEmbedder;
 use crate::errors::AppResult;
 use crate::models::flate::{calculate_md5, decompress_and_merge_files};
 use crate::storage::file_contents::FileContentsRepo;
 use crate::storage::files::{FileRecord, FilesRepo};
+use crate::storage::open_ai::OpenAiRepo;
 use crate::storage::DB;
 use embed_anything::embeddings::embed::EmbeddingResult;
+use lancedb::table::OptimizeAction;
 use log::info;
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::time::Duration;
-use lancedb::table::OptimizeAction;
 use tauri::{App, Manager, State};
 use tauri_plugin_log::{Target, TargetKind};
 use tokio::time::sleep;
@@ -33,7 +37,14 @@ pub fn run() {
                 .build(),
         )
         .setup(init_setup())
-        .invoke_handler(tauri::generate_handler![rag_query, get_sync_list, add_sync_items, delete_sync_item]) // 注册命令
+        .invoke_handler(tauri::generate_handler![
+            rag_query,
+            get_sync_list,
+            add_sync_items,
+            delete_sync_item,
+            get_ai_config,
+            save_ai_config
+        ]) // 注册命令
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -53,8 +64,8 @@ fn init_setup() -> fn(&mut App) -> Result<(), Box<dyn Error>> {
 
         tauri::async_runtime::spawn(async move {
             loop {
-                let _  = files.optimize(OptimizeAction::All).await;
-                let _  = file_contexts.optimize(OptimizeAction::All).await;
+                let _ = files.optimize(OptimizeAction::All).await;
+                let _ = file_contexts.optimize(OptimizeAction::All).await;
                 sleep(Duration::from_secs(3600)).await;
             }
         });
@@ -73,8 +84,12 @@ fn init_lancedb(app: &mut App) -> Result<(), Box<dyn Error>> {
     let db3 = db.clone();
     let file_context_db = tauri::async_runtime::block_on(async move { FileContentsRepo::new(&db3).await })?;
 
+    let db4 = db.clone();
+    let open_ai_db = tauri::async_runtime::block_on(async move { OpenAiRepo::new(&db4).await })?;
+
     app.manage(file_context_db);
     app.manage(files_db);
+    app.manage(open_ai_db);
     app.manage(db);
     Ok(())
 }
@@ -108,34 +123,38 @@ fn init_models(app: &mut App) -> Result<(), Box<dyn Error>> {
 
 /// RAG 查询命令
 #[tauri::command]
-fn rag_query(query: String, file_context: State<'_, FileContentsRepo>, emb: State<'_, AidenTextEmbedder>) -> AppResult<String> {
+fn rag_query(
+    query: String,
+    ai: State<'_, OpenAiRepo>,
+    file_context: State<'_, FileContentsRepo>,
+    emb: State<'_, AidenTextEmbedder>,
+) -> AppResult<String> {
+    let ai = ai.inner().clone();
     let file_context = file_context.inner().clone();
     let emb = emb.inner().clone();
     tauri::async_runtime::block_on(async move {
+        let question = query.clone();
         let mut s = emb.embed(&[query], emb.config().batch_size).await?;
         if s.is_empty() {
-            Ok("".to_string())
+            Ok("请输入内容或问题".to_string())
         } else {
             let v = match s.remove(0) {
                 EmbeddingResult::DenseVector(d) => d,
                 EmbeddingResult::MultiVector(mut m) => m.remove(0),
             };
             let records = file_context.find_similar(v, 5).await?;
-            if records.0.is_empty() {
-                return Ok("对不起，无数据!".to_string());
-            }
-            let mut map: HashMap<String, Vec<String>> = HashMap::new();
+            let res = if let Some(rt) = ai.query_id().await? {
+                let agent = OpenAiAgent::new(rt.url.as_ref(), rt.token.as_ref());
+                if records.is_empty() {
+                    agent.query_by_prompt(question.as_str()).await?
+                }else {
+                    agent.query(records).await?
+                }
+            } else {
+                records.to_markdown()
+            };
 
-            for record in records.0 {
-                map.entry(record.file_path).or_default().push(record.text);
-            }
-
-            let rep = map
-                .into_iter()
-                .map(|(k, v)| format!("文件：{}\n 内容：{}", k, v.join("\n")))
-                .collect::<Vec<_>>()
-                .join("\n");
-            Ok(rep)
+            Ok(res)
         }
     })
 }
@@ -159,4 +178,24 @@ fn delete_sync_item(path: String, files: State<'_, FilesRepo>, contents: State<'
     let contents = contents.inner().clone();
     let _ = tauri::async_runtime::block_on(async move { files.delete_by(&path).await });
     tauri::async_runtime::block_on(async move { contents.delete_by(&path_c).await })
+}
+
+#[tauri::command]
+fn get_ai_config(ai: State<'_, OpenAiRepo>) -> AppResult<OpenAiConfig> {
+    let ai = ai.inner().clone();
+    let res = tauri::async_runtime::block_on(async move { ai.query_id().await })?;
+    Ok(res.map(|r| OpenAiConfig { url: r.url, token: r.token }).unwrap_or_default())
+}
+
+#[tauri::command]
+fn save_ai_config(config: OpenAiConfig, ai: State<'_, OpenAiRepo>) -> AppResult<()> {
+    let ai = ai.inner().clone();
+    let _ = tauri::async_runtime::block_on(async move { ai.update_insert_token(config.url.as_ref(), config.token.as_ref()).await });
+    Ok(())
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct OpenAiConfig {
+    pub url: String,
+    pub token: String,
 }

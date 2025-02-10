@@ -8,6 +8,7 @@ use embed_anything::embeddings::embed::{EmbedData, EmbeddingResult};
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
 use lancedb::{DistanceType, Table};
+use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 
@@ -67,7 +68,7 @@ impl FileContentsRepo {
             .query()
             .nearest_to(vector)?
             .distance_type(DistanceType::Cosine)
-            .distance_range(Some(0.0), Some(0.5))
+            .distance_range(Some(0.0), Some(0.6))
             .limit(n)
             .execute()
             .await?
@@ -102,6 +103,39 @@ impl Deref for FileContentRecords {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl FileContentRecords {
+    /// 将 FileContentRecords 转换为 Markdown 格式的字符串，聚合相同 file_path 的 text
+    pub fn to_markdown(&self) -> String {
+        // 使用 HashMap 聚合相同 file_path 的 text
+        let mut file_map: HashMap<String, Vec<String>> = HashMap::new();
+
+        for record in &self.0 {
+            file_map
+                .entry(record.file_path.clone())
+                .or_insert_with(Vec::new)
+                .push(record.text.clone());
+        }
+
+        let mut markdown = String::new();
+
+        // 遍历聚合后的结果，生成 Markdown
+        for (file_path, texts) in file_map {
+            // 添加文件路径作为标题
+            markdown.push_str(&format!("### File: {}\n\n", file_path));
+
+            // 添加所有相关的 text 内容
+            for text in texts {
+                markdown.push_str(&format!("- {}\n", text));
+            }
+
+            // 添加分隔线
+            markdown.push_str("\n---\n\n");
+        }
+
+        markdown
     }
 }
 

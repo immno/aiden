@@ -24,12 +24,14 @@ impl EmbedManager {
                         sleep(Duration::from_millis(3000)).await;
                     } else {
                         for file in fr {
+                            let _ = repo2.update_progress_and_sync_time(&file.file_path, 1).await;
                             let data = embedder.embedding(Path::new(&file.file_path)).await;
+                            let _ = repo2.update_progress_and_sync_time(&file.file_path, 50).await;
                             let _ = tx.send_async((file.file_path, data)).await;
                         }
                     }
                 } else {
-                    sleep(Duration::from_millis(3000)).await;
+                    sleep(Duration::from_millis(1000)).await;
                 }
             }
         });
@@ -46,6 +48,8 @@ impl EmbedManager {
                     if let Err(e) = files.update_progress_and_sync_time(&file_path, 100).await {
                         log::error!("Failed to update progress, {}: {}", file_path, e);
                     }
+                } else {
+                    log::warn!("Data is empty, {}.", file_path);
                 }
             }
         });

@@ -1,5 +1,6 @@
-pub mod files;
 pub mod file_contents;
+pub mod files;
+pub mod open_ai;
 
 use crate::errors::AppResult;
 use arrow_schema::SchemaRef;

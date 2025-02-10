@@ -12,7 +12,11 @@
         </router-link>
         <router-link to="/config" class="nav-item">
           <span class="icon">⚙️</span>
-          <span class="text">Config</span>
+          <span class="text">Files</span>
+        </router-link>
+        <router-link to="/ai-config" class="nav-item">
+          <span class="icon">🤖</span>
+          <span class="text">Open AI</span>
         </router-link>
       </div>
     </div>

@@ -18,7 +18,7 @@
                     <div>文件路径</div>
                     <div>添加时间</div>
                     <div>同步时间</div>
-                    <div>进度</div> <!-- 修改为“进度” -->
+                    <div>进度</div>
                     <div>操作</div>
                 </div>
                 <div class="grid-body">
@@ -48,7 +48,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, onMounted, ref } from 'vue'
+import { defineComponent, onMounted, onUnmounted, ref } from 'vue'
 import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
 import { desktopDir } from '@tauri-apps/api/path'
@@ -74,8 +74,7 @@ export default defineComponent({
         // 从后端获取同步列表
         const fetchSyncList = async () => {
             try {
-                const response = await invoke<FileRecord[]>('get_sync_list')
-                syncList.value = response
+                syncList.value = await invoke<FileRecord[]>('get_sync_list')
             } catch (error) {
                 console.error('获取同步列表失败：', error)
             }
@@ -128,9 +127,19 @@ export default defineComponent({
             }
         }
 
-        // 组件加载时获取同步列表
+        let intervalId: number | null = null
+
+        // 组件加载时获取同步列表并设置定时器
         onMounted(() => {
             fetchSyncList()
+            intervalId = setInterval(fetchSyncList, 3000) // 每3秒刷新一次
+        })
+
+        // 组件卸载时清除定时器
+        onUnmounted(() => {
+            if (intervalId !== null) {
+                clearInterval(intervalId)
+            }
         })
 
         return {
